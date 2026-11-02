@@ -1,28 +1,40 @@
 #!/usr/bin/env python3
-# Developer : Hamdy Abou El Anein
-# hamdy.aea@protonmail.com
+# Developer: Hamdy Abou El Anein
+# Contact: info@daylightlinux.ch
+# SPDX-License-Identifier: GPL-3.0-only
+"""Flask random sentence generator with project-relative resources."""
+from pathlib import Path
+import secrets
 
-from flask import Flask, render_template
-import random
-import sys
+BASE_DIR = Path(__file__).resolve().parent
 
-path = '/home/hamdyaea/mysite'
-if path not in sys.path:
-   sys.path.insert(0, path)
+def load_sentences(path: Path | None = None) -> list[str]:
+    source = path if path is not None else BASE_DIR / "fortunes.txt"
+    with source.open("r", encoding="utf-8-sig") as handle:
+        return [text.strip() for text in handle.read().split("%") if text.strip()]
 
+def choose_sentence(sentences: list[str]) -> str:
+    if not sentences:
+        raise ValueError("No sentences are available")
+    return secrets.choice(sentences)
 
-app = Flask(__name__)
+def create_app(sentences_path: Path | None = None):
+    from flask import Flask, render_template
+    application = Flask(__name__, template_folder=str(BASE_DIR / "templates"), static_folder=str(BASE_DIR / "static"))
+    application.config["SENTENCES_FILE"] = str(sentences_path or BASE_DIR / "fortunes.txt")
 
-@app.route('/')
-def index():
-    file = open('/home/hamdyaea/mysite/fortunes.txt').read()
-    text = file.split('%')
-    start = 0
-    end = 434
-    value = random.randint(start,end)
-    msg = str(text[value])
-    #return msg+str("<br><br>This is a random text generator for tests<br><br>Developer : Hamdy Abou El Anein<br>hamdy.aea@protonmail.com")
-    return render_template("index.html",msg=msg)
+    @application.get("/")
+    def index():
+        try:
+            sentence = choose_sentence(load_sentences(Path(application.config["SENTENCES_FILE"])))
+        except (OSError, UnicodeError, ValueError):
+            return "Sentences temporarily unavailable", 503
+        return render_template("index.html", msg=sentence)
 
-if __name__ == '__main__':
-    app.run()
+    return application
+
+# Preserve the original WSGI import contract: from texter import app.
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=False)
